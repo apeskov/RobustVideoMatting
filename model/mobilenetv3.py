@@ -1,9 +1,11 @@
 import torch
 from torch import nn
 from torchvision.models.mobilenetv3 import MobileNetV3, InvertedResidualConfig
+from torchvision.models.quantization.mobilenetv3 import QuantizableMobileNetV3, QuantizableInvertedResidual
 from torchvision.transforms.functional import normalize
 
-class MobileNetV3LargeEncoder(MobileNetV3):
+
+class MobileNetV3LargeEncoder(QuantizableMobileNetV3):
     def __init__(self, pretrained: bool = False):
         super().__init__(
             inverted_residual_setting=[
@@ -23,29 +25,36 @@ class MobileNetV3LargeEncoder(MobileNetV3):
                 InvertedResidualConfig(160, 5, 960, 160,  True, "HS", 1, 2, 1),
                 InvertedResidualConfig(160, 5, 960, 160,  True, "HS", 1, 2, 1),
             ],
+            block=QuantizableInvertedResidual,
             last_channel=1280
         )
-        
+
         if pretrained:
             self.load_state_dict(torch.hub.load_state_dict_from_url(
                 'https://download.pytorch.org/models/mobilenet_v3_large-8738ca79.pth'))
 
+        self.quant = torch.quantization.QuantStub()
+        self.dequant1 = torch.quantization.DeQuantStub()
+        self.dequant2 = torch.quantization.DeQuantStub()
+        self.dequant3 = torch.quantization.DeQuantStub()
+        self.dequant4 = torch.quantization.DeQuantStub()
+
         del self.avgpool
         del self.classifier
-        
+
     def forward_single_frame(self, x):
         x = normalize(x, [0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        
+        x = self.quant(x)
         x = self.features[0](x)
         x = self.features[1](x)
-        f1 = x
+        f1 = self.dequant1(x)
         x = self.features[2](x)
         x = self.features[3](x)
-        f2 = x
+        f2 = self.dequant2(x)
         x = self.features[4](x)
         x = self.features[5](x)
         x = self.features[6](x)
-        f3 = x
+        f3 = self.dequant3(x)
         x = self.features[7](x)
         x = self.features[8](x)
         x = self.features[9](x)
@@ -56,9 +65,9 @@ class MobileNetV3LargeEncoder(MobileNetV3):
         x = self.features[14](x)
         x = self.features[15](x)
         x = self.features[16](x)
-        f4 = x
+        f4 = self.dequant4(x)
         return [f1, f2, f3, f4]
-    
+
     def forward_time_series(self, x):
         B, T = x.shape[:2]
         features = self.forward_single_frame(x.flatten(0, 1))
