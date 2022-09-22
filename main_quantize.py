@@ -7,7 +7,7 @@ from main_convert import save_as_script, load_rvm
 
 # some files form original RVM footage storage
 # https://drive.google.com/drive/folders/1VFnWwuu-YXDKG-N6vcjK_nL7YZMFapMU
-DATASET_DIR = "/Users/apeskov/Downloads"
+DATASET_DIR = "streams"
 CALIBRATION_DATASET = [
     ("es2.mp4", 30),
     ("codylexi.mp4", 30)
@@ -39,7 +39,7 @@ def evaluate(model, video_shape=None, dataset=CALIBRATION_DATASET):
 
 
 def quantize(model_path, out_name, frame_size=[1080, 1920], downsample_ratio=0.25):
-    model = load_rvm(model_path, downsample_ratio)
+    model = load_rvm(model_path, downsample_ratio=downsample_ratio, frame_size=frame_size)
 
     # Fuse model. Prerequisite
     model.fuse_model()
@@ -54,7 +54,7 @@ def quantize(model_path, out_name, frame_size=[1080, 1920], downsample_ratio=0.2
     # Convert to quantized version
     torch.quantization.convert(model, inplace=True)
 
-    save_as_script(model, out_name=out_name, frame_size=frame_size)
+    save_as_script(model, out_name=out_name)
 
 
 def main():
@@ -64,7 +64,7 @@ def main():
         os.makedirs(result_dir)
 
     for name in ["rvm_resnet50", "rvm_mobilenetv3"]:
-        quantize(f"{models_ref_dir}/{name}.pth", out_name=f"{result_dir}/{name}_int8.torchscript")
+        quantize(f"{models_ref_dir}/{name}.pth", out_name=f"{result_dir}/{name}_int8_trace.torchscript")
 
 
 if __name__ == '__main__':

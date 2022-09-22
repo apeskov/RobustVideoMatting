@@ -6,7 +6,7 @@ from inference_utils import VideoReader, VideoWriter
 
 # some files form original RVM footage storage
 # https://drive.google.com/drive/folders/1VFnWwuu-YXDKG-N6vcjK_nL7YZMFapMU
-DATASET_DIR = "/Users/apeskov/Downloads"
+DATASET_DIR = "streams"
 VALIDATION_DATASET = [
     ("es2.mp4", 60),
     ("codylexi.mp4", 60)
@@ -21,7 +21,7 @@ def evaluate(model, in_file=None, out_file=None, shapes=None, frame_limit=100500
     ])
 
     reader = VideoReader(in_file, transform=input_transform)
-    writer = VideoWriter(out_file, frame_rate=30) if out_file else None
+    writer = VideoWriter(out_file, frame_rate=reader.frame_rate, bit_rate=2500000)
 
     bgr = torch.tensor([.47, 1, .6]).view(3, 1, 1)  # Green background.
     rec = [torch.empty(*shape) for shape in shapes[1:]]
@@ -31,9 +31,9 @@ def evaluate(model, in_file=None, out_file=None, shapes=None, frame_limit=100500
     with torch.no_grad():
         for src in DataLoader(reader):
             fgr, pha, *rec = model(src, *rec)  # Cycle the recurrent states.
+            writer.write(fgr * pha + bgr * (1 - pha))
             print("*")
-            if writer:
-                writer.write(fgr * pha + bgr * (1 - pha))
+
             count += 1
             if count > frame_limit:
                 break
@@ -57,14 +57,14 @@ def main():
         os.makedirs(result_dir)
 
     for name in [
-        # "rvm_resnet50_fp32_trace",
-        # "rvm_resnet50_fp16_trace",
-        "rvm_resnet50_int8",
-        # "rvm_mobilenetv3_fp32_trace",
+        "rvm_resnet50_fp32_trace",
+        # "rvm_resnet50_fp16_trace",  # torch doesn't support fp16 for CPU scorring
+        "rvm_resnet50_int8_trace",
+        "rvm_mobilenetv3_fp32_trace",
         # "rvm_mobilenetv3_fp16_trace",
-        "rvm_mobilenetv3_int8"
+        "rvm_mobilenetv3_int8_trace"
     ]:
-        model_dir = "models_ref"
+        model_dir = "models_trace"
         model, input_shapes = load_rvm(f"{model_dir}/{name}.torchscript")
         for video_file, frame_limit in VALIDATION_DATASET:
             file_name = video_file.split(".")[0]
@@ -75,7 +75,7 @@ def main():
                      in_file=in_video_file_path,
                      out_file=out_video_file_path,
                      shapes=input_shapes,
-                     frame_limit=60)
+                     frame_limit=120)
 
 
 if __name__ == '__main__':
